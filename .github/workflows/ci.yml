@@ -17,6 +17,7 @@ jobs:
           dotnet-version: '8.0.x'
       - run: dotnet restore src/Philiprehberger.EventBus.csproj
       - run: dotnet build src/Philiprehberger.EventBus.csproj --configuration Release --no-restore
+      - run: dotnet test tests/Philiprehberger.EventBus.Tests/Philiprehberger.EventBus.Tests.csproj --configuration Release --no-restore
 
   publish:
     needs: build
