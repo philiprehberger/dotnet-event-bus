@@ -11,7 +11,7 @@
 
     <!-- Package metadata -->
     <PackageId>Philiprehberger.EventBus</PackageId>
-    <Version>0.1.2</Version>
+    <Version>0.1.3</Version>
     <Authors>Philip Rehberger</Authors>
     <Description>In-process publish/subscribe event bus with async handlers, scoped subscriptions, and Microsoft DI integration.</Description>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
