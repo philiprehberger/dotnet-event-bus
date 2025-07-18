@@ -19,6 +19,8 @@ public interface IEventBus
     /// </summary>
     /// <typeparam name="T">The type of the event to subscribe to.</typeparam>
     /// <param name="handler">The handler function to invoke when an event is published.</param>
+    /// <param name="priority">Execution priority. Lower values execute first. Default is <c>0</c>.</param>
+    /// <param name="filter">Optional predicate evaluated before invoking the handler. If it returns <c>false</c>, the handler is skipped.</param>
     /// <returns>A disposable that removes the subscription when disposed.</returns>
-    IDisposable Subscribe<T>(Func<T, CancellationToken, Task> handler);
+    IDisposable Subscribe<T>(Func<T, CancellationToken, Task> handler, int priority = 0, Func<T, bool>? filter = null);
 }

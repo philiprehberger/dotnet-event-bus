@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.2.0 (2026-03-28)
+
+- Add handler priority ordering with `priority` parameter on `Subscribe`
+- Add handler filtering with `filter` predicate on `Subscribe`
+- Add `OnHandlerError` callback to `EventBusOptions` for centralized error logging
+- Add `HandlerTimeout` option with `TimeoutException` enforcement per handler invocation
+- Add GitHub issue templates, dependabot configuration, and pull request template
+- Add missing README badges (GitHub release, Last updated, Bug Reports, Feature Requests)
+- Add Support section to README
+
 ## 0.1.3 (2026-03-26)
 
 - Add Sponsor badge and fix License link format in README

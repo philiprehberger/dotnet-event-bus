@@ -3,11 +3,28 @@ namespace Philiprehberger.EventBus;
 /// <summary>
 /// Configuration options for the event bus.
 /// </summary>
-/// <param name="ThrowOnHandlerError">
-/// When <c>true</c>, exceptions thrown by handlers are propagated to the publisher.
-/// When <c>false</c> (default), handler exceptions are swallowed.
-/// </param>
-/// <param name="MaxConcurrency">
-/// Maximum number of handlers to invoke concurrently. A value of <c>0</c> (default) means unlimited.
-/// </param>
-public record EventBusOptions(bool ThrowOnHandlerError = false, int MaxConcurrency = 0);
+public sealed class EventBusOptions
+{
+    /// <summary>
+    /// When <c>true</c>, exceptions thrown by handlers are propagated to the publisher.
+    /// When <c>false</c> (default), handler exceptions are swallowed (after invoking <see cref="OnHandlerError"/> if set).
+    /// </summary>
+    public bool ThrowOnHandlerError { get; set; }
+
+    /// <summary>
+    /// Maximum number of handlers to invoke concurrently. A value of <c>0</c> (default) means unlimited.
+    /// </summary>
+    public int MaxConcurrency { get; set; }
+
+    /// <summary>
+    /// Optional callback invoked when a handler throws an exception, enabling centralized error logging.
+    /// Called regardless of <see cref="ThrowOnHandlerError"/>.
+    /// </summary>
+    public Action<Exception>? OnHandlerError { get; set; }
+
+    /// <summary>
+    /// Optional timeout applied to each handler invocation. When set, a <see cref="TimeoutException"/>
+    /// is thrown if a handler does not complete within the specified duration.
+    /// </summary>
+    public TimeSpan? HandlerTimeout { get; set; }
+}
