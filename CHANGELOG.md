@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.3.0 (2026-03-31)
+
+- Add dead-letter queue via `OnDeadLetter` option — routes failed events and exceptions to a configurable handler when errors are swallowed
+- Add event replay with `EnableHistory(int maxEvents)` and `ReplayLastAsync(int count)` for circular buffer history tracking
+- Add middleware pipeline via `Use(Func<EventContext, Func<Task>, Task>)` for cross-cutting concerns that wrap every handler invocation
+- Add `EventContext` class exposing event metadata and an `Items` dictionary for middleware data passing
+
 ## 0.2.1 (2026-03-31)
 
 - Standardize README to 3-badge format with emoji Support section

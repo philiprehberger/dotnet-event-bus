@@ -4,7 +4,7 @@
 [![NuGet](https://img.shields.io/nuget/v/Philiprehberger.EventBus.svg)](https://www.nuget.org/packages/Philiprehberger.EventBus)
 [![Last updated](https://img.shields.io/github/last-commit/philiprehberger/dotnet-event-bus)](https://github.com/philiprehberger/dotnet-event-bus/commits/main)
 
-In-process publish/subscribe event bus with priority ordering, handler filtering, timeout enforcement, and Microsoft DI integration.
+In-process publish/subscribe event bus with middleware pipeline, dead-letter queue, event replay, and Microsoft DI integration.
 
 ## Installation
 
@@ -137,6 +137,85 @@ await bus.PublishAsync(new OrderPlaced(1));
 record OrderPlaced(int OrderId);
 ```
 
+### Dead-Letter Queue
+
+```csharp
+using Philiprehberger.EventBus;
+
+var bus = new EventBus(new EventBusOptions
+{
+    ThrowOnHandlerError = false,
+    OnDeadLetter = (evt, ex) =>
+        Console.Error.WriteLine($"Dead letter: {evt.GetType().Name} failed with {ex.Message}")
+});
+
+bus.Subscribe<OrderPlaced>((_, _) => throw new InvalidOperationException("payment failed"));
+
+await bus.PublishAsync(new OrderPlaced(1));
+// Logs "Dead letter: OrderPlaced failed with payment failed"
+
+record OrderPlaced(int OrderId);
+```
+
+### Event Replay
+
+```csharp
+using Philiprehberger.EventBus;
+
+var bus = new EventBus();
+bus.EnableHistory(maxEvents: 100);
+
+bus.Subscribe<OrderPlaced>((e, _) =>
+{
+    Console.WriteLine($"Order {e.OrderId}");
+    return Task.CompletedTask;
+});
+
+await bus.PublishAsync(new OrderPlaced(1));
+await bus.PublishAsync(new OrderPlaced(2));
+await bus.PublishAsync(new OrderPlaced(3));
+
+// Re-publishes the 2 most recent events (OrderPlaced 2, then 3)
+await bus.ReplayLastAsync(2);
+
+record OrderPlaced(int OrderId);
+```
+
+### Middleware
+
+```csharp
+using Philiprehberger.EventBus;
+
+var bus = new EventBus();
+
+// Add logging middleware
+bus.Use(async (context, next) =>
+{
+    Console.WriteLine($"Before: {context.EventType.Name}");
+    await next();
+    Console.WriteLine($"After: {context.EventType.Name}");
+});
+
+// Add timing middleware
+bus.Use(async (context, next) =>
+{
+    var sw = System.Diagnostics.Stopwatch.StartNew();
+    await next();
+    sw.Stop();
+    Console.WriteLine($"Handler took {sw.ElapsedMilliseconds}ms");
+});
+
+bus.Subscribe<OrderPlaced>((e, _) =>
+{
+    Console.WriteLine($"Processing order {e.OrderId}");
+    return Task.CompletedTask;
+});
+
+await bus.PublishAsync(new OrderPlaced(1));
+
+record OrderPlaced(int OrderId);
+```
+
 ### DI Registration
 
 ```csharp
@@ -179,6 +258,9 @@ public class OrderShippedHandler : IEventHandler<OrderShipped>
 |--------|-------------|
 | `PublishAsync<T>(@event, ct)` | Publishes an event to all registered handlers for the type |
 | `Subscribe<T>(handler, priority, filter)` | Subscribes a handler function; returns `IDisposable` to unsubscribe |
+| `Use(middleware)` | Registers a middleware function that wraps every handler invocation |
+| `EnableHistory(maxEvents)` | Enables circular buffer event history with the specified capacity |
+| `ReplayLastAsync(count, ct)` | Re-publishes the N most recent events from the history buffer |
 
 ### `IEventHandler<T>`
 
@@ -194,6 +276,7 @@ public class OrderShippedHandler : IEventHandler<OrderShipped>
 | `MaxConcurrency` | `int` | `0` | Max concurrent handler invocations (0 = unlimited) |
 | `OnHandlerError` | `Action<Exception>?` | `null` | Callback invoked when any handler throws an exception |
 | `HandlerTimeout` | `TimeSpan?` | `null` | Timeout per handler invocation; throws `TimeoutException` if exceeded |
+| `OnDeadLetter` | `Action<object, Exception>?` | `null` | Callback invoked with the failed event and exception when a handler throws and `ThrowOnHandlerError` is `false` |
 
 ### `Subscribe<T>` Parameters
 
@@ -202,6 +285,15 @@ public class OrderShippedHandler : IEventHandler<OrderShipped>
 | `handler` | `Func<T, CancellationToken, Task>` | required | The handler function to invoke |
 | `priority` | `int` | `0` | Execution priority; lower values execute first |
 | `filter` | `Func<T, bool>?` | `null` | Predicate evaluated before invoking; handler is skipped if it returns `false` |
+
+### `EventContext`
+
+| Property | Type | Description |
+|----------|------|-------------|
+| `Event` | `object` | The event instance being published |
+| `EventType` | `Type` | The CLR type of the event |
+| `CancellationToken` | `CancellationToken` | The cancellation token for the current publish operation |
+| `Items` | `IDictionary<string, object>` | Dictionary for middleware to pass data along the pipeline |
 
 ### `ServiceCollectionExtensions`
 
