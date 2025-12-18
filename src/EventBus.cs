@@ -39,7 +39,7 @@ public sealed class EventBus : IEventBus
     {
         ArgumentNullException.ThrowIfNull(@event);
 
-        RecordHistory(@event, ct);
+        RecordHistory(@event);
 
         var eventType = typeof(T);
 
@@ -169,7 +169,7 @@ public sealed class EventBus : IEventBus
         }
     }
 
-    private void RecordHistory<T>(T @event, CancellationToken ct)
+    private void RecordHistory<T>(T @event)
     {
         lock (_historyLock)
         {
