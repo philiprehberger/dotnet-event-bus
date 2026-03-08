@@ -47,4 +47,35 @@ public interface IEventBus
     /// <param name="ct">Optional cancellation token.</param>
     /// <returns>A task that completes when all replayed events have been processed.</returns>
     Task ReplayLastAsync(int count, CancellationToken ct = default);
+
+    /// <summary>
+    /// Clears all events from the history buffer without disabling history tracking.
+    /// Requires <see cref="EnableHistory"/> to have been called first.
+    /// </summary>
+    void ClearHistory();
+
+    /// <summary>
+    /// Returns <c>true</c> if there are any handlers registered for events of type <typeparamref name="T"/>.
+    /// </summary>
+    /// <typeparam name="T">The event type to check.</typeparam>
+    /// <returns><c>true</c> if at least one handler is registered; otherwise <c>false</c>.</returns>
+    bool HasSubscribers<T>();
+
+    /// <summary>
+    /// Subscribes a handler that is automatically unsubscribed after it handles one event.
+    /// </summary>
+    /// <typeparam name="T">The type of the event to subscribe to.</typeparam>
+    /// <param name="handler">The handler function to invoke once.</param>
+    /// <param name="filter">Optional predicate evaluated before invoking the handler. If it returns <c>false</c>, the handler is skipped and remains subscribed.</param>
+    /// <returns>A disposable that can cancel the subscription before the event arrives.</returns>
+    IDisposable SubscribeOnce<T>(Func<T, CancellationToken, Task> handler, Func<T, bool>? filter = null);
+
+    /// <summary>
+    /// Returns a task that completes with the next event of type <typeparamref name="T"/> that matches the optional filter.
+    /// </summary>
+    /// <typeparam name="T">The type of the event to wait for.</typeparam>
+    /// <param name="filter">Optional predicate; non-matching events are ignored.</param>
+    /// <param name="ct">Cancellation token that cancels the wait.</param>
+    /// <returns>A task that completes with the next matching event.</returns>
+    Task<T> WaitForAsync<T>(Func<T, bool>? filter = null, CancellationToken ct = default);
 }

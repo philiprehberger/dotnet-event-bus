@@ -169,6 +169,88 @@ public sealed class EventBus : IEventBus
         }
     }
 
+    /// <inheritdoc />
+    public void ClearHistory()
+    {
+        lock (_historyLock)
+        {
+            if (_historyBuffer is null)
+            {
+                throw new InvalidOperationException("Event history is not enabled. Call EnableHistory first.");
+            }
+
+            Array.Clear(_historyBuffer);
+            Array.Clear(_historyPublishers!);
+            _historyHead = 0;
+            _historyCount = 0;
+        }
+    }
+
+    /// <inheritdoc />
+    public bool HasSubscribers<T>()
+    {
+        if (!_handlers.TryGetValue(typeof(T), out var handlerList))
+        {
+            return false;
+        }
+
+        lock (handlerList)
+        {
+            return handlerList.Count > 0;
+        }
+    }
+
+    /// <inheritdoc />
+    public IDisposable SubscribeOnce<T>(Func<T, CancellationToken, Task> handler, Func<T, bool>? filter = null)
+    {
+        ArgumentNullException.ThrowIfNull(handler);
+
+        IDisposable? subscription = null;
+        var invoked = 0;
+
+        subscription = Subscribe<T>(async (e, ct) =>
+        {
+            if (Interlocked.CompareExchange(ref invoked, 1, 0) == 0)
+            {
+                try
+                {
+                    await handler(e, ct).ConfigureAwait(false);
+                }
+                finally
+                {
+                    subscription?.Dispose();
+                }
+            }
+        }, filter: filter);
+
+        if (invoked == 1)
+        {
+            subscription.Dispose();
+        }
+
+        return subscription;
+    }
+
+    /// <inheritdoc />
+    public Task<T> WaitForAsync<T>(Func<T, bool>? filter = null, CancellationToken ct = default)
+    {
+        var tcs = new TaskCompletionSource<T>(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        var subscription = SubscribeOnce<T>((e, _) =>
+        {
+            tcs.TrySetResult(e);
+            return Task.CompletedTask;
+        }, filter: filter);
+
+        ct.Register(() =>
+        {
+            subscription.Dispose();
+            tcs.TrySetCanceled(ct);
+        });
+
+        return tcs.Task;
+    }
+
     private void RecordHistory<T>(T @event)
     {
         lock (_historyLock)
