@@ -4,7 +4,7 @@
 [![NuGet](https://img.shields.io/nuget/v/Philiprehberger.EventBus.svg)](https://www.nuget.org/packages/Philiprehberger.EventBus)
 [![License](https://img.shields.io/github/license/philiprehberger/dotnet-event-bus)](LICENSE)
 
-Lightweight in-process publish/subscribe event bus with async handlers, scoped subscriptions, and Microsoft DI integration.
+In-process publish/subscribe event bus with async handlers, scoped subscriptions, and Microsoft DI integration.
 
 ## Installation
 
