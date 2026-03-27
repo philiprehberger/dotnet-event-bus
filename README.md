@@ -3,6 +3,7 @@
 [![CI](https://github.com/philiprehberger/dotnet-event-bus/actions/workflows/ci.yml/badge.svg)](https://github.com/philiprehberger/dotnet-event-bus/actions/workflows/ci.yml)
 [![NuGet](https://img.shields.io/nuget/v/Philiprehberger.EventBus.svg)](https://www.nuget.org/packages/Philiprehberger.EventBus)
 [![License](https://img.shields.io/github/license/philiprehberger/dotnet-event-bus)](LICENSE)
+[![Sponsor](https://img.shields.io/badge/sponsor-GitHub%20Sponsors-ec6cb9)](https://github.com/sponsors/philiprehberger)
 
 In-process publish/subscribe event bus with async handlers, scoped subscriptions, and Microsoft DI integration.
 
@@ -115,4 +116,4 @@ dotnet build src/Philiprehberger.EventBus.csproj --configuration Release
 
 ## License
 
-MIT
+[MIT](LICENSE)
