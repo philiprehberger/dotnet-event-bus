@@ -2,10 +2,14 @@
 
 [![CI](https://github.com/philiprehberger/dotnet-event-bus/actions/workflows/ci.yml/badge.svg)](https://github.com/philiprehberger/dotnet-event-bus/actions/workflows/ci.yml)
 [![NuGet](https://img.shields.io/nuget/v/Philiprehberger.EventBus.svg)](https://www.nuget.org/packages/Philiprehberger.EventBus)
+[![GitHub release](https://img.shields.io/github/v/release/philiprehberger/dotnet-event-bus)](https://github.com/philiprehberger/dotnet-event-bus/releases)
+[![Last updated](https://img.shields.io/github/last-commit/philiprehberger/dotnet-event-bus)](https://github.com/philiprehberger/dotnet-event-bus/commits/main)
 [![License](https://img.shields.io/github/license/philiprehberger/dotnet-event-bus)](LICENSE)
+[![Bug Reports](https://img.shields.io/github/issues/philiprehberger/dotnet-event-bus/bug)](https://github.com/philiprehberger/dotnet-event-bus/issues?q=is%3Aissue+is%3Aopen+label%3Abug)
+[![Feature Requests](https://img.shields.io/github/issues/philiprehberger/dotnet-event-bus/enhancement)](https://github.com/philiprehberger/dotnet-event-bus/issues?q=is%3Aissue+is%3Aopen+label%3Aenhancement)
 [![Sponsor](https://img.shields.io/badge/sponsor-GitHub%20Sponsors-ec6cb9)](https://github.com/sponsors/philiprehberger)
 
-In-process publish/subscribe event bus with async handlers, scoped subscriptions, and Microsoft DI integration.
+In-process publish/subscribe event bus with priority ordering, handler filtering, timeout enforcement, and Microsoft DI integration.
 
 ## Installation
 
@@ -49,6 +53,95 @@ await bus.PublishAsync(new UserRegistered("user@example.com"));
 record UserRegistered(string Email);
 ```
 
+### Handler Priority
+
+```csharp
+using Philiprehberger.EventBus;
+
+var bus = new EventBus();
+
+// Lower priority number executes first
+bus.Subscribe<OrderPlaced>((e, ct) =>
+{
+    Console.WriteLine("Validate order");
+    return Task.CompletedTask;
+}, priority: 10);
+
+bus.Subscribe<OrderPlaced>((e, ct) =>
+{
+    Console.WriteLine("Send confirmation email");
+    return Task.CompletedTask;
+}, priority: 20);
+
+await bus.PublishAsync(new OrderPlaced(1));
+// Output: Validate order, then Send confirmation email
+
+record OrderPlaced(int OrderId);
+```
+
+### Handler Filtering
+
+```csharp
+using Philiprehberger.EventBus;
+
+var bus = new EventBus();
+
+// Only handle high-value orders
+bus.Subscribe<OrderPlaced>(
+    (e, ct) =>
+    {
+        Console.WriteLine($"High-value order: {e.OrderId}");
+        return Task.CompletedTask;
+    },
+    filter: e => e.Total > 1000);
+
+await bus.PublishAsync(new OrderPlaced(1, 500));   // Skipped
+await bus.PublishAsync(new OrderPlaced(2, 2000));  // Handled
+
+record OrderPlaced(int OrderId, decimal Total);
+```
+
+### Error Handling
+
+```csharp
+using Philiprehberger.EventBus;
+
+var bus = new EventBus(new EventBusOptions
+{
+    ThrowOnHandlerError = false,
+    OnHandlerError = ex => Console.Error.WriteLine($"Handler failed: {ex.Message}")
+});
+
+bus.Subscribe<OrderPlaced>((_, _) => throw new InvalidOperationException("oops"));
+
+await bus.PublishAsync(new OrderPlaced(1));
+// Logs "Handler failed: oops" without propagating the exception
+
+record OrderPlaced(int OrderId);
+```
+
+### Handler Timeout
+
+```csharp
+using Philiprehberger.EventBus;
+
+var bus = new EventBus(new EventBusOptions
+{
+    ThrowOnHandlerError = true,
+    HandlerTimeout = TimeSpan.FromSeconds(5)
+});
+
+bus.Subscribe<OrderPlaced>(async (e, ct) =>
+{
+    await ProcessOrderAsync(e.OrderId, ct);
+});
+
+// Throws TimeoutException if the handler exceeds 5 seconds
+await bus.PublishAsync(new OrderPlaced(1));
+
+record OrderPlaced(int OrderId);
+```
+
 ### DI Registration
 
 ```csharp
@@ -56,10 +149,13 @@ using Philiprehberger.EventBus;
 
 var builder = WebApplication.CreateBuilder(args);
 
-builder.Services.AddEventBus(options => new EventBusOptions(
-    ThrowOnHandlerError: true,
-    MaxConcurrency: 4
-));
+builder.Services.AddEventBus(options =>
+{
+    options.ThrowOnHandlerError = true;
+    options.MaxConcurrency = 4;
+    options.HandlerTimeout = TimeSpan.FromSeconds(10);
+    options.OnHandlerError = ex => Console.Error.WriteLine(ex);
+});
 
 var app = builder.Build();
 ```
@@ -87,7 +183,7 @@ public class OrderShippedHandler : IEventHandler<OrderShipped>
 | Method | Description |
 |--------|-------------|
 | `PublishAsync<T>(@event, ct)` | Publishes an event to all registered handlers for the type |
-| `Subscribe<T>(handler)` | Subscribes a handler function; returns `IDisposable` to unsubscribe |
+| `Subscribe<T>(handler, priority, filter)` | Subscribes a handler function; returns `IDisposable` to unsubscribe |
 
 ### `IEventHandler<T>`
 
@@ -101,6 +197,16 @@ public class OrderShippedHandler : IEventHandler<OrderShipped>
 |----------|------|---------|-------------|
 | `ThrowOnHandlerError` | `bool` | `false` | Propagate handler exceptions to the publisher |
 | `MaxConcurrency` | `int` | `0` | Max concurrent handler invocations (0 = unlimited) |
+| `OnHandlerError` | `Action<Exception>?` | `null` | Callback invoked when any handler throws an exception |
+| `HandlerTimeout` | `TimeSpan?` | `null` | Timeout per handler invocation; throws `TimeoutException` if exceeded |
+
+### `Subscribe<T>` Parameters
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `handler` | `Func<T, CancellationToken, Task>` | required | The handler function to invoke |
+| `priority` | `int` | `0` | Execution priority; lower values execute first |
+| `filter` | `Func<T, bool>?` | `null` | Predicate evaluated before invoking; handler is skipped if it returns `false` |
 
 ### `ServiceCollectionExtensions`
 
@@ -113,6 +219,13 @@ public class OrderShippedHandler : IEventHandler<OrderShipped>
 ```bash
 dotnet build src/Philiprehberger.EventBus.csproj --configuration Release
 ```
+
+## Support
+
+If you find this package useful, consider giving it a star on GitHub — it helps motivate continued maintenance and development.
+
+[![LinkedIn](https://img.shields.io/badge/Philip%20Rehberger-LinkedIn-0A66C2?logo=linkedin)](https://www.linkedin.com/in/philiprehberger)
+[![More packages](https://img.shields.io/badge/more-open%20source%20packages-blue)](https://philiprehberger.com/open-source-packages)
 
 ## License
 

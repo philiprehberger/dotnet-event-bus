@@ -22,11 +22,38 @@ public class EventBusOptionsTests
     }
 
     [Fact]
+    public void Defaults_OnHandlerErrorIsNull()
+    {
+        var options = new EventBusOptions();
+
+        Assert.Null(options.OnHandlerError);
+    }
+
+    [Fact]
+    public void Defaults_HandlerTimeoutIsNull()
+    {
+        var options = new EventBusOptions();
+
+        Assert.Null(options.HandlerTimeout);
+    }
+
+    [Fact]
     public void Constructor_WithCustomValues_SetsProperties()
     {
-        var options = new EventBusOptions(ThrowOnHandlerError: true, MaxConcurrency: 5);
+        var errorHandler = (Exception _) => { };
+        var timeout = TimeSpan.FromSeconds(10);
+
+        var options = new EventBusOptions
+        {
+            ThrowOnHandlerError = true,
+            MaxConcurrency = 5,
+            OnHandlerError = errorHandler,
+            HandlerTimeout = timeout
+        };
 
         Assert.True(options.ThrowOnHandlerError);
         Assert.Equal(5, options.MaxConcurrency);
+        Assert.Same(errorHandler, options.OnHandlerError);
+        Assert.Equal(timeout, options.HandlerTimeout);
     }
 }

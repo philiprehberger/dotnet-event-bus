@@ -38,10 +38,10 @@ public sealed class EventBus : IEventBus
             return;
         }
 
-        Func<T, CancellationToken, Task>[] snapshot;
+        HandlerRegistration<T>[] snapshot;
         lock (handlerList)
         {
-            snapshot = handlerList.Cast<Func<T, CancellationToken, Task>>().ToArray();
+            snapshot = handlerList.Cast<HandlerRegistration<T>>().OrderBy(r => r.Priority).ToArray();
         }
 
         if (snapshot.Length == 0)
@@ -52,12 +52,12 @@ public sealed class EventBus : IEventBus
         if (_options.MaxConcurrency > 0)
         {
             using var semaphore = new SemaphoreSlim(_options.MaxConcurrency);
-            var tasks = snapshot.Select(async handler =>
+            var tasks = snapshot.Select(async registration =>
             {
                 await semaphore.WaitAsync(ct).ConfigureAwait(false);
                 try
                 {
-                    await InvokeHandler(handler, @event, ct).ConfigureAwait(false);
+                    await InvokeHandler(registration, @event, ct).ConfigureAwait(false);
                 }
                 finally
                 {
@@ -68,44 +68,78 @@ public sealed class EventBus : IEventBus
         }
         else
         {
-            var tasks = snapshot.Select(handler => InvokeHandler(handler, @event, ct));
+            var tasks = snapshot.Select(registration => InvokeHandler(registration, @event, ct));
             await Task.WhenAll(tasks).ConfigureAwait(false);
         }
     }
 
     /// <inheritdoc />
-    public IDisposable Subscribe<T>(Func<T, CancellationToken, Task> handler)
+    public IDisposable Subscribe<T>(Func<T, CancellationToken, Task> handler, int priority = 0, Func<T, bool>? filter = null)
     {
         ArgumentNullException.ThrowIfNull(handler);
 
+        var registration = new HandlerRegistration<T>(handler, priority, filter);
         var eventType = typeof(T);
         var handlerList = _handlers.GetOrAdd(eventType, _ => new List<object>());
 
         lock (handlerList)
         {
-            handlerList.Add(handler);
+            handlerList.Add(registration);
         }
 
         return new Subscription(() =>
         {
             lock (handlerList)
             {
-                handlerList.Remove(handler);
+                handlerList.Remove(registration);
             }
         });
     }
 
-    private async Task InvokeHandler<T>(Func<T, CancellationToken, Task> handler, T @event, CancellationToken ct)
+    private async Task InvokeHandler<T>(HandlerRegistration<T> registration, T @event, CancellationToken ct)
     {
         try
         {
-            await handler(@event, ct).ConfigureAwait(false);
+            if (registration.Filter is not null && !registration.Filter(@event))
+            {
+                return;
+            }
+
+            if (_options.HandlerTimeout.HasValue)
+            {
+                using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+                timeoutCts.CancelAfter(_options.HandlerTimeout.Value);
+
+                try
+                {
+                    await registration.Handler(@event, timeoutCts.Token).ConfigureAwait(false);
+                }
+                catch (OperationCanceledException) when (!ct.IsCancellationRequested)
+                {
+                    throw new TimeoutException(
+                        $"Handler for event type '{typeof(T).Name}' did not complete within the configured timeout of {_options.HandlerTimeout.Value.TotalMilliseconds}ms.");
+                }
+            }
+            else
+            {
+                await registration.Handler(@event, ct).ConfigureAwait(false);
+            }
         }
-        catch when (!_options.ThrowOnHandlerError)
+        catch (Exception ex)
         {
-            // Swallow exception when ThrowOnHandlerError is false
+            _options.OnHandlerError?.Invoke(ex);
+
+            if (_options.ThrowOnHandlerError)
+            {
+                throw;
+            }
         }
     }
+
+    private sealed record HandlerRegistration<T>(
+        Func<T, CancellationToken, Task> Handler,
+        int Priority,
+        Func<T, bool>? Filter);
 
     private sealed class Subscription : IDisposable
     {
