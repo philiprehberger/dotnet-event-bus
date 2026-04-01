@@ -27,4 +27,10 @@ public sealed class EventBusOptions
     /// is thrown if a handler does not complete within the specified duration.
     /// </summary>
     public TimeSpan? HandlerTimeout { get; set; }
+
+    /// <summary>
+    /// Optional dead-letter handler invoked when a handler throws and <see cref="ThrowOnHandlerError"/> is <c>false</c>.
+    /// Receives the event that failed and the exception that was thrown.
+    /// </summary>
+    public Action<object, Exception>? OnDeadLetter { get; set; }
 }

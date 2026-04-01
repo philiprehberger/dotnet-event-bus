@@ -9,6 +9,14 @@ public sealed class EventBus : IEventBus
 {
     private readonly ConcurrentDictionary<Type, List<object>> _handlers = new();
     private readonly EventBusOptions _options;
+    private readonly List<Func<EventContext, Func<Task>, Task>> _middleware = new();
+    private readonly object _middlewareLock = new();
+
+    private readonly object _historyLock = new();
+    private object[]? _historyBuffer;
+    private Func<object, CancellationToken, Task>[]? _historyPublishers;
+    private int _historyHead;
+    private int _historyCount;
 
     /// <summary>
     /// Creates a new <see cref="EventBus"/> instance with default options.
@@ -30,6 +38,8 @@ public sealed class EventBus : IEventBus
     public async Task PublishAsync<T>(T @event, CancellationToken ct = default)
     {
         ArgumentNullException.ThrowIfNull(@event);
+
+        RecordHistory(@event, ct);
 
         var eventType = typeof(T);
 
@@ -96,6 +106,88 @@ public sealed class EventBus : IEventBus
         });
     }
 
+    /// <inheritdoc />
+    public void Use(Func<EventContext, Func<Task>, Task> middleware)
+    {
+        ArgumentNullException.ThrowIfNull(middleware);
+
+        lock (_middlewareLock)
+        {
+            _middleware.Add(middleware);
+        }
+    }
+
+    /// <inheritdoc />
+    public void EnableHistory(int maxEvents)
+    {
+        if (maxEvents <= 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(maxEvents), "Max events must be greater than zero.");
+        }
+
+        lock (_historyLock)
+        {
+            _historyBuffer = new object[maxEvents];
+            _historyPublishers = new Func<object, CancellationToken, Task>[maxEvents];
+            _historyHead = 0;
+            _historyCount = 0;
+        }
+    }
+
+    /// <inheritdoc />
+    public async Task ReplayLastAsync(int count, CancellationToken ct = default)
+    {
+        if (count < 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(count), "Count must not be negative.");
+        }
+
+        (object Event, Func<object, CancellationToken, Task> Publisher)[] toReplay;
+
+        lock (_historyLock)
+        {
+            if (_historyBuffer is null || _historyPublishers is null)
+            {
+                throw new InvalidOperationException("Event history is not enabled. Call EnableHistory first.");
+            }
+
+            var replayCount = Math.Min(count, _historyCount);
+            toReplay = new (object, Func<object, CancellationToken, Task>)[replayCount];
+
+            var startIndex = (_historyHead - replayCount + _historyBuffer.Length) % _historyBuffer.Length;
+            for (var i = 0; i < replayCount; i++)
+            {
+                var idx = (startIndex + i) % _historyBuffer.Length;
+                toReplay[i] = (_historyBuffer[idx], _historyPublishers[idx]);
+            }
+        }
+
+        foreach (var (evt, publisher) in toReplay)
+        {
+            ct.ThrowIfCancellationRequested();
+            await publisher(evt, ct).ConfigureAwait(false);
+        }
+    }
+
+    private void RecordHistory<T>(T @event, CancellationToken ct)
+    {
+        lock (_historyLock)
+        {
+            if (_historyBuffer is null || _historyPublishers is null)
+            {
+                return;
+            }
+
+            _historyBuffer[_historyHead] = @event!;
+            _historyPublishers[_historyHead] = (obj, token) => PublishAsync((T)obj, token);
+            _historyHead = (_historyHead + 1) % _historyBuffer.Length;
+            if (_historyCount < _historyBuffer.Length)
+            {
+                _historyCount++;
+            }
+        }
+    }
+
     private async Task InvokeHandler<T>(HandlerRegistration<T> registration, T @event, CancellationToken ct)
     {
         try
@@ -105,35 +197,73 @@ public sealed class EventBus : IEventBus
                 return;
             }
 
-            if (_options.HandlerTimeout.HasValue)
+            Func<EventContext, Func<Task>, Task>[] middlewareSnapshot;
+            lock (_middlewareLock)
             {
-                using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
-                timeoutCts.CancelAfter(_options.HandlerTimeout.Value);
+                middlewareSnapshot = _middleware.ToArray();
+            }
 
-                try
+            async Task CoreHandler()
+            {
+                if (_options.HandlerTimeout.HasValue)
                 {
-                    await registration.Handler(@event, timeoutCts.Token).ConfigureAwait(false);
+                    using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+                    timeoutCts.CancelAfter(_options.HandlerTimeout.Value);
+
+                    try
+                    {
+                        await registration.Handler(@event, timeoutCts.Token).ConfigureAwait(false);
+                    }
+                    catch (OperationCanceledException) when (!ct.IsCancellationRequested)
+                    {
+                        throw new TimeoutException(
+                            $"Handler for event type '{typeof(T).Name}' did not complete within the configured timeout of {_options.HandlerTimeout.Value.TotalMilliseconds}ms.");
+                    }
                 }
-                catch (OperationCanceledException) when (!ct.IsCancellationRequested)
+                else
                 {
-                    throw new TimeoutException(
-                        $"Handler for event type '{typeof(T).Name}' did not complete within the configured timeout of {_options.HandlerTimeout.Value.TotalMilliseconds}ms.");
+                    await registration.Handler(@event, ct).ConfigureAwait(false);
                 }
+            }
+
+            if (middlewareSnapshot.Length > 0)
+            {
+                var context = new EventContext(@event!, typeof(T), ct);
+                await BuildPipeline(middlewareSnapshot, 0, context, CoreHandler)().ConfigureAwait(false);
             }
             else
             {
-                await registration.Handler(@event, ct).ConfigureAwait(false);
+                await CoreHandler().ConfigureAwait(false);
             }
         }
         catch (Exception ex)
         {
             _options.OnHandlerError?.Invoke(ex);
 
+            if (!_options.ThrowOnHandlerError)
+            {
+                _options.OnDeadLetter?.Invoke(@event!, ex);
+            }
+
             if (_options.ThrowOnHandlerError)
             {
                 throw;
             }
         }
+    }
+
+    private static Func<Task> BuildPipeline(
+        Func<EventContext, Func<Task>, Task>[] middleware,
+        int index,
+        EventContext context,
+        Func<Task> core)
+    {
+        if (index >= middleware.Length)
+        {
+            return core;
+        }
+
+        return () => middleware[index](context, BuildPipeline(middleware, index + 1, context, core));
     }
 
     private sealed record HandlerRegistration<T>(

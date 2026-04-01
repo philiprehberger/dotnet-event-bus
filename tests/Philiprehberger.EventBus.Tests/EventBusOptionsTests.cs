@@ -38,9 +38,18 @@ public class EventBusOptionsTests
     }
 
     [Fact]
+    public void Defaults_OnDeadLetterIsNull()
+    {
+        var options = new EventBusOptions();
+
+        Assert.Null(options.OnDeadLetter);
+    }
+
+    [Fact]
     public void Constructor_WithCustomValues_SetsProperties()
     {
         var errorHandler = (Exception _) => { };
+        var deadLetterHandler = (object _, Exception _) => { };
         var timeout = TimeSpan.FromSeconds(10);
 
         var options = new EventBusOptions
@@ -48,12 +57,14 @@ public class EventBusOptionsTests
             ThrowOnHandlerError = true,
             MaxConcurrency = 5,
             OnHandlerError = errorHandler,
-            HandlerTimeout = timeout
+            HandlerTimeout = timeout,
+            OnDeadLetter = deadLetterHandler
         };
 
         Assert.True(options.ThrowOnHandlerError);
         Assert.Equal(5, options.MaxConcurrency);
         Assert.Same(errorHandler, options.OnHandlerError);
         Assert.Equal(timeout, options.HandlerTimeout);
+        Assert.Same(deadLetterHandler, options.OnDeadLetter);
     }
 }
