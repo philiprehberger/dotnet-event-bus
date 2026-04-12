@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.4.0 (2026-04-11)
+
+- Add `SubscribeOnce<T>` for one-time subscriptions that auto-unsubscribe after the first matching event
+- Add `WaitForAsync<T>` to await the next event of a given type with optional filter and cancellation support
+- Add `HasSubscribers<T>` to check whether any handlers are registered for an event type
+- Add `ClearHistory` to reset the event history buffer without disabling tracking
+
 ## 0.3.0 (2026-03-31)
 
 - Add dead-letter queue via `OnDeadLetter` option — routes failed events and exceptions to a configurable handler when errors are swallowed

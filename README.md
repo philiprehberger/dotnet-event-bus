@@ -216,6 +216,62 @@ await bus.PublishAsync(new OrderPlaced(1));
 record OrderPlaced(int OrderId);
 ```
 
+### One-Time Subscription
+
+```csharp
+using Philiprehberger.EventBus;
+
+var bus = new EventBus();
+
+// Handler is automatically unsubscribed after the first matching event
+bus.SubscribeOnce<OrderPlaced>((e, _) =>
+{
+    Console.WriteLine($"First order placed: {e.OrderId}");
+    return Task.CompletedTask;
+});
+
+await bus.PublishAsync(new OrderPlaced(1)); // Handled
+await bus.PublishAsync(new OrderPlaced(2)); // Ignored — already unsubscribed
+
+record OrderPlaced(int OrderId);
+```
+
+### Await Next Event
+
+```csharp
+using Philiprehberger.EventBus;
+
+var bus = new EventBus();
+
+// Start waiting before the event is published
+var waitTask = bus.WaitForAsync<OrderPlaced>(
+    filter: e => e.Total > 1000);
+
+// Publish events from another part of the application
+await bus.PublishAsync(new OrderPlaced(1, 500));   // Skipped by filter
+await bus.PublishAsync(new OrderPlaced(2, 2000));  // Completes the wait
+
+var order = await waitTask;
+Console.WriteLine($"High-value order: {order.OrderId}");
+
+record OrderPlaced(int OrderId, decimal Total);
+```
+
+### Check Subscribers
+
+```csharp
+using Philiprehberger.EventBus;
+
+var bus = new EventBus();
+
+Console.WriteLine(bus.HasSubscribers<OrderPlaced>()); // False
+
+using var sub = bus.Subscribe<OrderPlaced>((_, _) => Task.CompletedTask);
+Console.WriteLine(bus.HasSubscribers<OrderPlaced>()); // True
+
+record OrderPlaced(int OrderId);
+```
+
 ### DI Registration
 
 ```csharp
@@ -261,6 +317,10 @@ public class OrderShippedHandler : IEventHandler<OrderShipped>
 | `Use(middleware)` | Registers a middleware function that wraps every handler invocation |
 | `EnableHistory(maxEvents)` | Enables circular buffer event history with the specified capacity |
 | `ReplayLastAsync(count, ct)` | Re-publishes the N most recent events from the history buffer |
+| `ClearHistory()` | Clears all events from the history buffer without disabling tracking |
+| `HasSubscribers<T>()` | Returns `true` if any handlers are registered for the event type |
+| `SubscribeOnce<T>(handler, filter)` | Subscribes a handler that auto-unsubscribes after one invocation |
+| `WaitForAsync<T>(filter, ct)` | Returns a `Task<T>` that completes with the next matching event |
 
 ### `IEventHandler<T>`
 
