@@ -232,6 +232,65 @@ public sealed class EventBus : IEventBus
     }
 
     /// <inheritdoc />
+    public int GetSubscriberCount<T>()
+    {
+        if (!_handlers.TryGetValue(typeof(T), out var handlerList))
+        {
+            return 0;
+        }
+
+        lock (handlerList)
+        {
+            return handlerList.Count;
+        }
+    }
+
+    /// <inheritdoc />
+    public void UnsubscribeAll<T>()
+    {
+        if (_handlers.TryGetValue(typeof(T), out var handlerList))
+        {
+            lock (handlerList)
+            {
+                handlerList.Clear();
+            }
+        }
+    }
+
+    /// <inheritdoc />
+    public void UnsubscribeAll()
+    {
+        foreach (var kvp in _handlers)
+        {
+            lock (kvp.Value)
+            {
+                kvp.Value.Clear();
+            }
+        }
+    }
+
+    /// <inheritdoc />
+    public IReadOnlyList<object> GetHistory()
+    {
+        lock (_historyLock)
+        {
+            if (_historyBuffer is null)
+            {
+                throw new InvalidOperationException("Event history is not enabled. Call EnableHistory first.");
+            }
+
+            var result = new object[_historyCount];
+            var startIndex = (_historyHead - _historyCount + _historyBuffer.Length) % _historyBuffer.Length;
+            for (var i = 0; i < _historyCount; i++)
+            {
+                result[i] = _historyBuffer[(startIndex + i) % _historyBuffer.Length];
+            }
+
+            return result;
+        }
+    }
+
+    /// <inheritdoc />
     public Task<T> WaitForAsync<T>(Func<T, bool>? filter = null, CancellationToken ct = default)
     {
         var tcs = new TaskCompletionSource<T>(TaskCreationOptions.RunContinuationsAsynchronously);

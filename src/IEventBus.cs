@@ -78,4 +78,29 @@ public interface IEventBus
     /// <param name="ct">Cancellation token that cancels the wait.</param>
     /// <returns>A task that completes with the next matching event.</returns>
     Task<T> WaitForAsync<T>(Func<T, bool>? filter = null, CancellationToken ct = default);
+
+    /// <summary>
+    /// Returns the number of handlers registered for events of type <typeparamref name="T"/>.
+    /// </summary>
+    /// <typeparam name="T">The event type to check.</typeparam>
+    /// <returns>The number of registered handlers, or <c>0</c> if none are registered.</returns>
+    int GetSubscriberCount<T>();
+
+    /// <summary>
+    /// Removes all handlers registered for events of type <typeparamref name="T"/>.
+    /// </summary>
+    /// <typeparam name="T">The event type whose handlers should be removed.</typeparam>
+    void UnsubscribeAll<T>();
+
+    /// <summary>
+    /// Removes all handlers for all event types.
+    /// </summary>
+    void UnsubscribeAll();
+
+    /// <summary>
+    /// Returns a read-only snapshot of the event history buffer in chronological order.
+    /// Requires <see cref="EnableHistory"/> to have been called first.
+    /// </summary>
+    /// <returns>A read-only list of recorded events, oldest first.</returns>
+    IReadOnlyList<object> GetHistory();
 }
