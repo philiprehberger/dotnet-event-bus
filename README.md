@@ -265,9 +265,53 @@ using Philiprehberger.EventBus;
 var bus = new EventBus();
 
 Console.WriteLine(bus.HasSubscribers<OrderPlaced>()); // False
+Console.WriteLine(bus.GetSubscriberCount<OrderPlaced>()); // 0
 
 using var sub = bus.Subscribe<OrderPlaced>((_, _) => Task.CompletedTask);
 Console.WriteLine(bus.HasSubscribers<OrderPlaced>()); // True
+Console.WriteLine(bus.GetSubscriberCount<OrderPlaced>()); // 1
+
+record OrderPlaced(int OrderId);
+```
+
+### Bulk Unsubscribe
+
+```csharp
+using Philiprehberger.EventBus;
+
+var bus = new EventBus();
+
+bus.Subscribe<OrderPlaced>((e, _) => { Console.WriteLine(e.OrderId); return Task.CompletedTask; });
+bus.Subscribe<OrderPlaced>((e, _) => { Console.WriteLine("Audit: " + e.OrderId); return Task.CompletedTask; });
+
+// Remove all handlers for a specific event type
+bus.UnsubscribeAll<OrderPlaced>();
+
+// Or remove all handlers for all event types
+bus.UnsubscribeAll();
+
+record OrderPlaced(int OrderId);
+```
+
+### Inspect Event History
+
+```csharp
+using Philiprehberger.EventBus;
+
+var bus = new EventBus();
+bus.EnableHistory(100);
+
+await bus.PublishAsync(new OrderPlaced(1));
+await bus.PublishAsync(new OrderPlaced(2));
+await bus.PublishAsync(new OrderPlaced(3));
+
+// Read recorded events without re-triggering handlers
+IReadOnlyList<object> history = bus.GetHistory();
+foreach (var evt in history)
+{
+    Console.WriteLine(((OrderPlaced)evt).OrderId);
+}
+// Output: 1, 2, 3
 
 record OrderPlaced(int OrderId);
 ```
@@ -319,6 +363,10 @@ public class OrderShippedHandler : IEventHandler<OrderShipped>
 | `ReplayLastAsync(count, ct)` | Re-publishes the N most recent events from the history buffer |
 | `ClearHistory()` | Clears all events from the history buffer without disabling tracking |
 | `HasSubscribers<T>()` | Returns `true` if any handlers are registered for the event type |
+| `GetSubscriberCount<T>()` | Returns the number of handlers registered for the event type |
+| `UnsubscribeAll<T>()` | Removes all handlers for a specific event type |
+| `UnsubscribeAll()` | Removes all handlers for all event types |
+| `GetHistory()` | Returns a read-only snapshot of recorded events in chronological order |
 | `SubscribeOnce<T>(handler, filter)` | Subscribes a handler that auto-unsubscribes after one invocation |
 | `WaitForAsync<T>(filter, ct)` | Returns a `Task<T>` that completes with the next matching event |
 

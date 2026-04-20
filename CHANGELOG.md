@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.5.0 (2026-04-13)
+
+- Add `GetSubscriberCount<T>()` to return the number of handlers registered for an event type
+- Add `UnsubscribeAll<T>()` to remove all handlers for a specific event type
+- Add `UnsubscribeAll()` to remove all handlers for all event types
+- Add `GetHistory()` to return a read-only snapshot of the event history buffer
+
 ## 0.4.0 (2026-04-11)
 
 - Add `SubscribeOnce<T>` for one-time subscriptions that auto-unsubscribe after the first matching event
