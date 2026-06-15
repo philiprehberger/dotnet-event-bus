@@ -103,4 +103,33 @@ public interface IEventBus
     /// </summary>
     /// <returns>A read-only list of recorded events, oldest first.</returns>
     IReadOnlyList<object> GetHistory();
+
+    /// <summary>
+    /// Returns a read-only snapshot of the recorded events filtered to those of type <typeparamref name="T"/>.
+    /// Requires <see cref="EnableHistory"/> to have been called first.
+    /// </summary>
+    /// <typeparam name="T">The event type to filter the history by.</typeparam>
+    /// <returns>A read-only list of recorded events of the given type, oldest first.</returns>
+    IReadOnlyList<T> GetHistory<T>();
+
+    /// <summary>
+    /// Indicates whether event history tracking is currently enabled.
+    /// </summary>
+    bool IsHistoryEnabled { get; }
+
+    /// <summary>
+    /// Disables event history tracking and releases the underlying buffer.
+    /// Idempotent — calling on a bus without history enabled is a no-op.
+    /// </summary>
+    void DisableHistory();
+
+    /// <summary>
+    /// Subscribes an <see cref="IEventHandler{T}"/> implementation to events of type <typeparamref name="T"/>.
+    /// </summary>
+    /// <typeparam name="T">The type of the event to subscribe to.</typeparam>
+    /// <param name="handler">The event handler instance to invoke when an event is published.</param>
+    /// <param name="priority">Execution priority. Lower values execute first. Default is <c>0</c>.</param>
+    /// <param name="filter">Optional predicate evaluated before invoking the handler. If it returns <c>false</c>, the handler is skipped.</param>
+    /// <returns>A disposable that removes the subscription when disposed.</returns>
+    IDisposable Subscribe<T>(IEventHandler<T> handler, int priority = 0, Func<T, bool>? filter = null);
 }

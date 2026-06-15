@@ -135,6 +135,37 @@ public sealed class EventBus : IEventBus
     }
 
     /// <inheritdoc />
+    public bool IsHistoryEnabled
+    {
+        get
+        {
+            lock (_historyLock)
+            {
+                return _historyBuffer is not null;
+            }
+        }
+    }
+
+    /// <inheritdoc />
+    public void DisableHistory()
+    {
+        lock (_historyLock)
+        {
+            _historyBuffer = null;
+            _historyPublishers = null;
+            _historyHead = 0;
+            _historyCount = 0;
+        }
+    }
+
+    /// <inheritdoc />
+    public IDisposable Subscribe<T>(IEventHandler<T> handler, int priority = 0, Func<T, bool>? filter = null)
+    {
+        ArgumentNullException.ThrowIfNull(handler);
+        return Subscribe<T>(handler.HandleAsync, priority, filter);
+    }
+
+    /// <inheritdoc />
     public async Task ReplayLastAsync(int count, CancellationToken ct = default)
     {
         if (count < 0)
@@ -284,6 +315,31 @@ public sealed class EventBus : IEventBus
             for (var i = 0; i < _historyCount; i++)
             {
                 result[i] = _historyBuffer[(startIndex + i) % _historyBuffer.Length];
+            }
+
+            return result;
+        }
+    }
+
+    /// <inheritdoc />
+    public IReadOnlyList<T> GetHistory<T>()
+    {
+        lock (_historyLock)
+        {
+            if (_historyBuffer is null)
+            {
+                throw new InvalidOperationException("Event history is not enabled. Call EnableHistory first.");
+            }
+
+            var result = new List<T>(_historyCount);
+            var startIndex = (_historyHead - _historyCount + _historyBuffer.Length) % _historyBuffer.Length;
+            for (var i = 0; i < _historyCount; i++)
+            {
+                var evt = _historyBuffer[(startIndex + i) % _historyBuffer.Length];
+                if (evt is T typed)
+                {
+                    result.Add(typed);
+                }
             }
 
             return result;

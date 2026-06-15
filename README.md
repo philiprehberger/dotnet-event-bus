@@ -4,6 +4,8 @@
 [![NuGet](https://img.shields.io/nuget/v/Philiprehberger.EventBus.svg)](https://www.nuget.org/packages/Philiprehberger.EventBus)
 [![Last updated](https://img.shields.io/github/last-commit/philiprehberger/dotnet-event-bus)](https://github.com/philiprehberger/dotnet-event-bus/commits/main)
 
+![Philiprehberger.EventBus](https://raw.githubusercontent.com/philiprehberger/dotnet-event-bus/main/package-card.webp)
+
 In-process publish/subscribe event bus with middleware pipeline, dead-letter queue, event replay, and Microsoft DI integration.
 
 ## Installation
@@ -313,7 +315,26 @@ foreach (var evt in history)
 }
 // Output: 1, 2, 3
 
+// Typed history filtered to a specific event type
+IReadOnlyList<OrderPlaced> orders = bus.GetHistory<OrderPlaced>();
+
 record OrderPlaced(int OrderId);
+```
+
+### Toggle History
+
+```csharp
+using Philiprehberger.EventBus;
+
+var bus = new EventBus();
+
+if (!bus.IsHistoryEnabled)
+{
+    bus.EnableHistory(100);
+}
+
+// ...later, when telemetry is no longer needed...
+bus.DisableHistory();
 ```
 
 ### DI Registration
@@ -348,6 +369,11 @@ public class OrderShippedHandler : IEventHandler<OrderShipped>
         await NotifyCustomerAsync(@event.OrderId, @event.TrackingNumber, ct);
     }
 }
+
+// Subscribe an IEventHandler<T> instance directly (no DI required)
+var bus = new EventBus();
+var handler = new OrderShippedHandler();
+using var sub = bus.Subscribe<OrderShipped>(handler);
 ```
 
 ## API
@@ -358,8 +384,11 @@ public class OrderShippedHandler : IEventHandler<OrderShipped>
 |--------|-------------|
 | `PublishAsync<T>(@event, ct)` | Publishes an event to all registered handlers for the type |
 | `Subscribe<T>(handler, priority, filter)` | Subscribes a handler function; returns `IDisposable` to unsubscribe |
+| `Subscribe<T>(IEventHandler<T>, priority, filter)` | Subscribes an `IEventHandler<T>` instance; returns `IDisposable` to unsubscribe |
 | `Use(middleware)` | Registers a middleware function that wraps every handler invocation |
 | `EnableHistory(maxEvents)` | Enables circular buffer event history with the specified capacity |
+| `DisableHistory()` | Disables history tracking and releases the buffer |
+| `IsHistoryEnabled` | `bool` property; `true` when history tracking is currently enabled |
 | `ReplayLastAsync(count, ct)` | Re-publishes the N most recent events from the history buffer |
 | `ClearHistory()` | Clears all events from the history buffer without disabling tracking |
 | `HasSubscribers<T>()` | Returns `true` if any handlers are registered for the event type |
@@ -367,6 +396,7 @@ public class OrderShippedHandler : IEventHandler<OrderShipped>
 | `UnsubscribeAll<T>()` | Removes all handlers for a specific event type |
 | `UnsubscribeAll()` | Removes all handlers for all event types |
 | `GetHistory()` | Returns a read-only snapshot of recorded events in chronological order |
+| `GetHistory<T>()` | Returns recorded events filtered to type `T`, oldest first |
 | `SubscribeOnce<T>(handler, filter)` | Subscribes a handler that auto-unsubscribes after one invocation |
 | `WaitForAsync<T>(filter, ct)` | Returns a `Task<T>` that completes with the next matching event |
 

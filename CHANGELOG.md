@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.6.0 (2026-06-14)
+
+- Add `IsHistoryEnabled` property to safely check before calling history APIs
+- Add `DisableHistory()` to release the history buffer when no longer needed
+- Add typed `GetHistory<T>()` overload that filters recorded events by type
+- Add `Subscribe<T>(IEventHandler<T>)` overload for direct handler-instance subscriptions
+- Add card image to README
+
 ## 0.5.0 (2026-04-13)
 
 - Add `GetSubscriberCount<T>()` to return the number of handlers registered for an event type
