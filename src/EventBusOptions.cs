@@ -13,8 +13,18 @@ public sealed class EventBusOptions
 
     /// <summary>
     /// Maximum number of handlers to invoke concurrently. A value of <c>0</c> (default) means unlimited.
+    /// Ignored when <see cref="SequentialDispatch"/> is <c>true</c>.
     /// </summary>
     public int MaxConcurrency { get; set; }
+
+    /// <summary>
+    /// When <c>true</c>, handlers for a published event are awaited one at a time in ascending
+    /// <c>priority</c> order, so each handler completes before the next begins. This makes the
+    /// <c>priority</c> parameter fully deterministic and enables ordered pipelines.
+    /// When <c>false</c> (default), all handlers are dispatched concurrently. Overrides
+    /// <see cref="MaxConcurrency"/> when enabled.
+    /// </summary>
+    public bool SequentialDispatch { get; set; }
 
     /// <summary>
     /// Optional callback invoked when a handler throws an exception, enabling centralized error logging.

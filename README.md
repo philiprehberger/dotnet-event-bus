@@ -76,6 +76,26 @@ await bus.PublishAsync(new OrderPlaced(1));
 record OrderPlaced(int OrderId);
 ```
 
+### Sequential Dispatch
+
+```csharp
+using Philiprehberger.EventBus;
+
+// By default handlers run concurrently. Enable SequentialDispatch to await each
+// handler in strict priority order before starting the next — useful for ordered
+// pipelines (validate → mutate → notify).
+var bus = new EventBus(new EventBusOptions { SequentialDispatch = true });
+
+bus.Subscribe<OrderPlaced>((e, _) => { Console.WriteLine("1. Validate"); return Task.CompletedTask; }, priority: 10);
+bus.Subscribe<OrderPlaced>((e, _) => { Console.WriteLine("2. Charge"); return Task.CompletedTask; }, priority: 20);
+bus.Subscribe<OrderPlaced>((e, _) => { Console.WriteLine("3. Notify"); return Task.CompletedTask; }, priority: 30);
+
+await bus.PublishAsync(new OrderPlaced(1));
+// Output (each completes before the next begins): 1. Validate, 2. Charge, 3. Notify
+
+record OrderPlaced(int OrderId);
+```
+
 ### Handler Filtering
 
 ```csharp
@@ -214,6 +234,9 @@ bus.Subscribe<OrderPlaced>((e, _) =>
 });
 
 await bus.PublishAsync(new OrderPlaced(1));
+
+// Remove every registered middleware when the pipeline should reset
+bus.ClearMiddleware();
 
 record OrderPlaced(int OrderId);
 ```
@@ -386,6 +409,7 @@ using var sub = bus.Subscribe<OrderShipped>(handler);
 | `Subscribe<T>(handler, priority, filter)` | Subscribes a handler function; returns `IDisposable` to unsubscribe |
 | `Subscribe<T>(IEventHandler<T>, priority, filter)` | Subscribes an `IEventHandler<T>` instance; returns `IDisposable` to unsubscribe |
 | `Use(middleware)` | Registers a middleware function that wraps every handler invocation |
+| `ClearMiddleware()` | Removes all previously registered middleware functions |
 | `EnableHistory(maxEvents)` | Enables circular buffer event history with the specified capacity |
 | `DisableHistory()` | Disables history tracking and releases the buffer |
 | `IsHistoryEnabled` | `bool` property; `true` when history tracking is currently enabled |
@@ -411,7 +435,8 @@ using var sub = bus.Subscribe<OrderShipped>(handler);
 | Property | Type | Default | Description |
 |----------|------|---------|-------------|
 | `ThrowOnHandlerError` | `bool` | `false` | Propagate handler exceptions to the publisher |
-| `MaxConcurrency` | `int` | `0` | Max concurrent handler invocations (0 = unlimited) |
+| `MaxConcurrency` | `int` | `0` | Max concurrent handler invocations (0 = unlimited); ignored when `SequentialDispatch` is `true` |
+| `SequentialDispatch` | `bool` | `false` | Await handlers one at a time in ascending priority order instead of concurrently |
 | `OnHandlerError` | `Action<Exception>?` | `null` | Callback invoked when any handler throws an exception |
 | `HandlerTimeout` | `TimeSpan?` | `null` | Timeout per handler invocation; throws `TimeoutException` if exceeded |
 | `OnDeadLetter` | `Action<object, Exception>?` | `null` | Callback invoked with the failed event and exception when a handler throws and `ThrowOnHandlerError` is `false` |

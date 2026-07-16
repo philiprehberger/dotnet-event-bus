@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.7.0 (2026-07-15)
+
+- Add `EventBusOptions.SequentialDispatch` to await handlers one at a time in ascending priority order, making handler `priority` fully deterministic for ordered pipelines
+- Add `IEventBus.ClearMiddleware()` to remove all middleware registered via `Use`
+
 ## 0.6.0 (2026-06-14)
 
 - Add `IsHistoryEnabled` property to safely check before calling history APIs

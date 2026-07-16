@@ -33,6 +33,12 @@ public interface IEventBus
     void Use(Func<EventContext, Func<Task>, Task> middleware);
 
     /// <summary>
+    /// Removes all middleware functions previously registered via <see cref="Use"/>.
+    /// Subsequent publishes invoke handlers directly with no middleware pipeline.
+    /// </summary>
+    void ClearMiddleware();
+
+    /// <summary>
     /// Enables event history tracking with a fixed-capacity circular buffer.
     /// </summary>
     /// <param name="maxEvents">The maximum number of events to retain. Must be greater than zero.</param>

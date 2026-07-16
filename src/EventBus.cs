@@ -59,7 +59,14 @@ public sealed class EventBus : IEventBus
             return;
         }
 
-        if (_options.MaxConcurrency > 0)
+        if (_options.SequentialDispatch)
+        {
+            foreach (var registration in snapshot)
+            {
+                await InvokeHandler(registration, @event, ct).ConfigureAwait(false);
+            }
+        }
+        else if (_options.MaxConcurrency > 0)
         {
             using var semaphore = new SemaphoreSlim(_options.MaxConcurrency);
             var tasks = snapshot.Select(async registration =>
@@ -114,6 +121,15 @@ public sealed class EventBus : IEventBus
         lock (_middlewareLock)
         {
             _middleware.Add(middleware);
+        }
+    }
+
+    /// <inheritdoc />
+    public void ClearMiddleware()
+    {
+        lock (_middlewareLock)
+        {
+            _middleware.Clear();
         }
     }
 

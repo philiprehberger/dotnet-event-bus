@@ -11,7 +11,7 @@
 
     <!-- Package metadata -->
     <PackageId>Philiprehberger.EventBus</PackageId>
-    <Version>0.6.0</Version>
+    <Version>0.7.0</Version>
     <Authors>Philip Rehberger</Authors>
     <Description>In-process publish/subscribe event bus with middleware pipeline, dead-letter queue, event replay, and Microsoft DI integration.</Description>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
