@@ -43,4 +43,13 @@ public sealed class EventBusOptions
     /// Receives the event that failed and the exception that was thrown.
     /// </summary>
     public Action<object, Exception>? OnDeadLetter { get; set; }
+
+    /// <summary>
+    /// Maximum number of failed events retained in the in-memory dead-letter store, readable via
+    /// <see cref="IEventBus.GetDeadLetters"/>. When the store is full, the oldest entry is discarded.
+    /// A value of <c>0</c> (default) disables the store. Entries are recorded under the same conditions
+    /// as <see cref="OnDeadLetter"/> and independently of whether that callback is set.
+    /// Must not be negative.
+    /// </summary>
+    public int MaxDeadLetters { get; set; }
 }

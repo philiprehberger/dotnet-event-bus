@@ -6,7 +6,7 @@
 
 ![Philiprehberger.EventBus](https://raw.githubusercontent.com/philiprehberger/dotnet-event-bus/main/package-card.webp)
 
-In-process publish/subscribe event bus with middleware pipeline, dead-letter queue, event replay, and Microsoft DI integration.
+In-process publish/subscribe event bus with middleware, dead letters, event replay, and Microsoft DI integration.
 
 ## Installation
 
@@ -179,6 +179,29 @@ await bus.PublishAsync(new OrderPlaced(1));
 record OrderPlaced(int OrderId);
 ```
 
+### Dead-Letter Store
+
+```csharp
+using Philiprehberger.EventBus;
+
+// Keep the 100 most recent failures in memory (0 = disabled, the default)
+var bus = new EventBus(new EventBusOptions { MaxDeadLetters = 100 });
+
+bus.Subscribe<OrderPlaced>((_, _) => throw new InvalidOperationException("payment failed"));
+
+await bus.PublishAsync(new OrderPlaced(1));
+
+foreach (var deadLetter in bus.GetDeadLetters())
+{
+    Console.WriteLine($"{deadLetter.Timestamp:O} {deadLetter.Event} failed: {deadLetter.Exception.Message}");
+}
+
+// Drop the inspected entries
+bus.ClearDeadLetters();
+
+record OrderPlaced(int OrderId);
+```
+
 ### Event Replay
 
 ```csharp
@@ -295,6 +318,12 @@ Console.WriteLine(bus.GetSubscriberCount<OrderPlaced>()); // 0
 using var sub = bus.Subscribe<OrderPlaced>((_, _) => Task.CompletedTask);
 Console.WriteLine(bus.HasSubscribers<OrderPlaced>()); // True
 Console.WriteLine(bus.GetSubscriberCount<OrderPlaced>()); // 1
+
+// List every event type that currently has handlers
+foreach (var type in bus.GetSubscribedEventTypes())
+{
+    Console.WriteLine(type.Name); // OrderPlaced
+}
 
 record OrderPlaced(int OrderId);
 ```
@@ -423,6 +452,9 @@ using var sub = bus.Subscribe<OrderShipped>(handler);
 | `GetHistory<T>()` | Returns recorded events filtered to type `T`, oldest first |
 | `SubscribeOnce<T>(handler, filter)` | Subscribes a handler that auto-unsubscribes after one invocation |
 | `WaitForAsync<T>(filter, ct)` | Returns a `Task<T>` that completes with the next matching event |
+| `GetDeadLetters()` | Returns a read-only snapshot of the dead-letter store, oldest first (empty when `MaxDeadLetters` is `0`) |
+| `ClearDeadLetters()` | Removes all entries from the dead-letter store |
+| `GetSubscribedEventTypes()` | Returns the event types that currently have at least one handler |
 
 ### `IEventHandler<T>`
 
@@ -440,6 +472,15 @@ using var sub = bus.Subscribe<OrderShipped>(handler);
 | `OnHandlerError` | `Action<Exception>?` | `null` | Callback invoked when any handler throws an exception |
 | `HandlerTimeout` | `TimeSpan?` | `null` | Timeout per handler invocation; throws `TimeoutException` if exceeded |
 | `OnDeadLetter` | `Action<object, Exception>?` | `null` | Callback invoked with the failed event and exception when a handler throws and `ThrowOnHandlerError` is `false` |
+| `MaxDeadLetters` | `int` | `0` | Capacity of the in-memory dead-letter store (0 = disabled); oldest entries are discarded when full; must not be negative |
+
+### `DeadLetter`
+
+| Property | Type | Description |
+|----------|------|-------------|
+| `Event` | `object` | The event that a handler failed to process |
+| `Exception` | `Exception` | The exception thrown by the handler |
+| `Timestamp` | `DateTimeOffset` | When the failure was recorded (UTC) |
 
 ### `Subscribe<T>` Parameters
 
@@ -468,6 +509,7 @@ using var sub = bus.Subscribe<OrderShipped>(handler);
 
 ```bash
 dotnet build src/Philiprehberger.EventBus.csproj --configuration Release
+dotnet test tests/Philiprehberger.EventBus.Tests/Philiprehberger.EventBus.Tests.csproj --configuration Release
 ```
 
 ## Support

@@ -18,6 +18,11 @@ public sealed class EventBus : IEventBus
     private int _historyHead;
     private int _historyCount;
 
+    private readonly object _deadLetterLock = new();
+    private readonly DeadLetter[]? _deadLetterBuffer;
+    private int _deadLetterHead;
+    private int _deadLetterCount;
+
     /// <summary>
     /// Creates a new <see cref="EventBus"/> instance with default options.
     /// </summary>
@@ -29,9 +34,20 @@ public sealed class EventBus : IEventBus
     /// Creates a new <see cref="EventBus"/> instance with the specified options.
     /// </summary>
     /// <param name="options">Configuration options for the event bus.</param>
+    /// <exception cref="ArgumentOutOfRangeException">Thrown when <see cref="EventBusOptions.MaxDeadLetters"/> is negative.</exception>
     public EventBus(EventBusOptions options)
     {
+        if (options.MaxDeadLetters < 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(options), "MaxDeadLetters must not be negative.");
+        }
+
         _options = options;
+
+        if (options.MaxDeadLetters > 0)
+        {
+            _deadLetterBuffer = new DeadLetter[options.MaxDeadLetters];
+        }
     }
 
     /// <inheritdoc />
@@ -382,6 +398,80 @@ public sealed class EventBus : IEventBus
         return tcs.Task;
     }
 
+    /// <inheritdoc />
+    public IReadOnlyList<DeadLetter> GetDeadLetters()
+    {
+        if (_deadLetterBuffer is null)
+        {
+            return Array.Empty<DeadLetter>();
+        }
+
+        lock (_deadLetterLock)
+        {
+            var result = new DeadLetter[_deadLetterCount];
+            var startIndex = (_deadLetterHead - _deadLetterCount + _deadLetterBuffer.Length) % _deadLetterBuffer.Length;
+            for (var i = 0; i < _deadLetterCount; i++)
+            {
+                result[i] = _deadLetterBuffer[(startIndex + i) % _deadLetterBuffer.Length];
+            }
+
+            return result;
+        }
+    }
+
+    /// <inheritdoc />
+    public void ClearDeadLetters()
+    {
+        if (_deadLetterBuffer is null)
+        {
+            return;
+        }
+
+        lock (_deadLetterLock)
+        {
+            Array.Clear(_deadLetterBuffer);
+            _deadLetterHead = 0;
+            _deadLetterCount = 0;
+        }
+    }
+
+    /// <inheritdoc />
+    public IReadOnlyList<Type> GetSubscribedEventTypes()
+    {
+        var result = new List<Type>();
+
+        foreach (var kvp in _handlers)
+        {
+            lock (kvp.Value)
+            {
+                if (kvp.Value.Count > 0)
+                {
+                    result.Add(kvp.Key);
+                }
+            }
+        }
+
+        return result;
+    }
+
+    private void RecordDeadLetter(object @event, Exception exception)
+    {
+        if (_deadLetterBuffer is null)
+        {
+            return;
+        }
+
+        lock (_deadLetterLock)
+        {
+            _deadLetterBuffer[_deadLetterHead] = new DeadLetter(@event, exception, DateTimeOffset.UtcNow);
+            _deadLetterHead = (_deadLetterHead + 1) % _deadLetterBuffer.Length;
+            if (_deadLetterCount < _deadLetterBuffer.Length)
+            {
+                _deadLetterCount++;
+            }
+        }
+    }
+
     private void RecordHistory<T>(T @event)
     {
         lock (_historyLock)
@@ -455,6 +545,7 @@ public sealed class EventBus : IEventBus
 
             if (!_options.ThrowOnHandlerError)
             {
+                RecordDeadLetter(@event!, ex);
                 _options.OnDeadLetter?.Invoke(@event!, ex);
             }
 

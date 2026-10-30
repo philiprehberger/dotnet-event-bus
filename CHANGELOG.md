@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.8.0 (2026-10-30)
+
+- Add in-memory dead-letter store: `EventBusOptions.MaxDeadLetters` (default `0` = disabled) keeps a bounded, thread-safe buffer of failed events alongside `OnDeadLetter`
+- Add `IEventBus.GetDeadLetters()` returning `IReadOnlyList<DeadLetter>` and `IEventBus.ClearDeadLetters()`
+- Add `DeadLetter` record with `Event`, `Exception`, and `Timestamp`
+- Add `IEventBus.GetSubscribedEventTypes()` to list event types that currently have handlers
+- `EventBus` constructor throws `ArgumentOutOfRangeException` when `MaxDeadLetters` is negative
+- New members on `IEventBus` are a breaking change for custom implementations of the interface
+- Shorten package description to under 120 characters
+- Add test command to README Development section
+
 ## 0.7.0 (2026-07-15)
 
 - Add `EventBusOptions.SequentialDispatch` to await handlers one at a time in ascending priority order, making handler `priority` fully deterministic for ordered pipelines

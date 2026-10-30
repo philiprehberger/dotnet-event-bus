@@ -138,4 +138,23 @@ public interface IEventBus
     /// <param name="filter">Optional predicate evaluated before invoking the handler. If it returns <c>false</c>, the handler is skipped.</param>
     /// <returns>A disposable that removes the subscription when disposed.</returns>
     IDisposable Subscribe<T>(IEventHandler<T> handler, int priority = 0, Func<T, bool>? filter = null);
+
+    /// <summary>
+    /// Returns a read-only snapshot of the in-memory dead-letter store in chronological order.
+    /// Returns an empty list when <see cref="EventBusOptions.MaxDeadLetters"/> is <c>0</c>.
+    /// </summary>
+    /// <returns>A read-only list of dead letters, oldest first.</returns>
+    IReadOnlyList<DeadLetter> GetDeadLetters();
+
+    /// <summary>
+    /// Removes all entries from the in-memory dead-letter store.
+    /// No-op when <see cref="EventBusOptions.MaxDeadLetters"/> is <c>0</c>.
+    /// </summary>
+    void ClearDeadLetters();
+
+    /// <summary>
+    /// Returns the event types that currently have at least one registered handler.
+    /// </summary>
+    /// <returns>A read-only snapshot of the subscribed event types.</returns>
+    IReadOnlyList<Type> GetSubscribedEventTypes();
 }
